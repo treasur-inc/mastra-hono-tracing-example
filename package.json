@@ -1,0 +1,25 @@
+{
+  "name": "tracing-exp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev": "turbo dev",
+    "watch": "turbo watch dev",
+    "test": "turbo test",
+    "test:watch": "turbo test:watch",
+    "clean": "rimraf --glob '.turbo' 'node_modules' '**/node_modules' '**/dist' '**/.turbo' '**/.next'"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.2",
+    "turbo": "^2.6.0",
+    "typescript": "5.9.3"
+  },
+  "packageManager": "pnpm@10.20.0",
+  "engines": {
+    "node": ">=20"
+  }
+}
