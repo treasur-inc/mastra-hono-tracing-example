@@ -5,15 +5,14 @@ import {
   SensitiveDataFilter,
 } from "@mastra/core/ai-tracing";
 import { httpInstrumentationMiddleware } from "@hono/otel";
-import { mastraEndpoint } from "./endpoint.js";
+import { mastraEndpoint, testAgent } from "./endpoint.js";
 
 const PROJECT_NAME = process.env.ARIZE_PROJECT_NAME || "tracing-exp";
 
 export const mastra: Mastra = new Mastra({
   observability: {
-    default: { enabled: false },
     configs: {
-      production: {
+      default: {
         serviceName: PROJECT_NAME,
         sampling: { type: SamplingStrategyType.ALWAYS },
         processors: [new SensitiveDataFilter()],
@@ -27,6 +26,7 @@ export const mastra: Mastra = new Mastra({
       },
     },
   },
+  agents: { "test-agent": testAgent },
   server: {
     port: 4111,
     apiRoutes: [mastraEndpoint],
