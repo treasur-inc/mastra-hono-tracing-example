@@ -11,21 +11,16 @@ export const isOpenInferenceSpan = (span: ReadableSpan) => {
   return typeof maybeOpenInferenceSpanKind === "string";
 };
 
-// Code copied from the link below. Mastra uses a custom tracing wrapper,
-// so this just uses the standards under the hood.
-// https://github.com/mastra-ai/mastra/blob/b8fd400083e6dd919e6627cfaf89eedd8c8d0e0a/observability/arize/src/openInferenceOTLPExporter.ts
 class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
   export(
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void
   ) {
     const processedSpans = spans.map((span) => {
-      // Only process AI spans
       if (!isOpenInferenceSpan(span)) {
         return span;
       }
 
-      // convert Mastra input messages to GenAI messages if present
       if (
         span.attributes?.["gen_ai.prompt"] &&
         typeof span.attributes["gen_ai.prompt"] === "string"
@@ -35,7 +30,6 @@ class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
             span.attributes["gen_ai.prompt"]
           );
       }
-      // convert Mastra output messages to GenAI messages if present
       if (
         span.attributes?.["gen_ai.completion"] &&
         typeof span.attributes["gen_ai.completion"] === "string"
@@ -50,7 +44,6 @@ class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
         convertGenAISpanAttributesToOpenInferenceSpanAttributes(
           span.attributes
         );
-      // only add processed attributes if conversion was successful
       if (processedAttributes) {
         (span as Mutable<ReadableSpan>).attributes = processedAttributes;
       }
@@ -64,29 +57,10 @@ class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
 export const ARIZE_AX_ENDPOINT = "https://otlp.arize.com/v1/traces";
 
 export type ArizeOpenInferenceOTLPTraceExporterConfig = {
-  /**
-   * Required if sending traces to Arize AX
-   */
   spaceId?: string;
-  /**
-   * Required if sending traces to Arize AX, or to any other collector that
-   * requires an Authorization header
-   */
   apiKey?: string;
-  /**
-   * Collector endpoint destination for trace exports.
-   * Required when sending traces to Phoenix, Phoenix Cloud, or other collectors.
-   * Optional when sending traces to Arize AX.
-   */
   endpoint?: string;
-  /**
-   * Optional project name to be added as a resource attribute using
-   * OpenInference Semantic Conventions
-   */
   projectName?: string;
-  /**
-   * Optional headers to be added to each OTLP request
-   */
   headers?: Record<string, string>;
 };
 
@@ -99,12 +73,10 @@ export class ArizeOpenInferenceOTLPTraceExporter extends OpenInferenceOTLPTraceE
       ...config.headers,
     };
     if (config.spaceId) {
-      // arize ax header configuration
       headers.space_id = config.spaceId;
       headers.api_key = config.apiKey ?? "";
       endpoint = config.endpoint || ARIZE_AX_ENDPOINT;
     } else if (config.apiKey) {
-      // standard otel header configuration
       headers.Authorization = `Bearer ${config.apiKey}`;
     }
     super({
@@ -112,7 +84,6 @@ export class ArizeOpenInferenceOTLPTraceExporter extends OpenInferenceOTLPTraceE
       headers,
     });
 
-    // Log configuration for debugging
     console.log("Arize exporter initialized", {
       endpoint,
       hasSpaceId: !!config.spaceId,
@@ -127,7 +98,6 @@ export class ArizeOpenInferenceOTLPTraceExporter extends OpenInferenceOTLPTraceE
   ) {
     this.exportCount++;
 
-    // Call parent export with wrapped callback to log failures only
     const wrappedCallback = (result: ExportResult) => {
       if (result.code !== 0) {
         console.log(`Arize export #${this.exportCount} failed`, {
@@ -143,9 +113,6 @@ export class ArizeOpenInferenceOTLPTraceExporter extends OpenInferenceOTLPTraceE
   }
 }
 
-/**
- * Type represenation of a gen_ai chat message part
- */
 type GenAIMessagePart =
   | {
       type: "text";
@@ -164,17 +131,11 @@ type GenAIMessagePart =
       response: string;
     };
 
-/**
- * Type representation of a gen_ai chat message
- */
 type GenAIMessage = {
   role: string;
   parts: GenAIMessagePart[];
 };
 
-/**
- * Assumed type representation of a Mastra message content type
- */
 type MastraMessagePart =
   | {
       type: "text";
@@ -188,9 +149,6 @@ type MastraMessagePart =
       output: { value: unknown };
     };
 
-/**
- * Assumed type representation of a Mastra message
- */
 type MastraMessage = {
   role: string;
   content: MastraMessagePart[];
@@ -225,24 +183,6 @@ const isMastraMessage = (m: unknown): m is MastraMessage => {
   );
 };
 
-/**
- * Convert an Input/Output string from a MastraSpan into a jsonified string that adheres to
- * OpenTelemetry gen_ai.input.messages and gen_ai.output.messages schema.
- * If parsing fails at any step, the original inputOutputString is returned unmodified.
- *
- * This conversion is best effort; It assumes a consistent shape for mastra messages, and converts
- * into the gen_ai input and output schemas as of October 20th, 2025.
- *
- * @see https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/#gen-ai-input-messages
- * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-input-messages.json
- * @see https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/#gen-ai-output-messages
- * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-output-messages.json
- *
- * @param inputOutputString a jsonified string that contains messages adhering to what appears to be
- * Mastra's message shape.
- * @returns a jsonified string that contains messages adhering to the OpenTelemetry gen_ai.input.messages and gen_ai.output.messages schema.
- * If parsing fails at any step, the original inputOutputString is returned unmodified.
- */
 export const convertMastraMessagesToGenAIMessages = (
   inputOutputString: string
 ): string => {
@@ -253,11 +193,8 @@ export const convertMastraMessagesToGenAIMessages = (
       parsedIO == null ||
       (!("messages" in parsedIO) && !("text" in parsedIO))
     ) {
-      // inputOutputString fails initial type guard, just return it
       return inputOutputString;
     }
-    // if the IO simply contains a text string, return a single text message
-    // formatted as a gen_ai assistant message, assuming its an assistant response
     if ("text" in parsedIO) {
       return JSON.stringify([
         {
@@ -266,7 +203,6 @@ export const convertMastraMessagesToGenAIMessages = (
         } satisfies GenAIMessage,
       ]);
     }
-    // if the IO contains messages, convert them to gen_ai messages
     if (Array.isArray(parsedIO.messages)) {
       return JSON.stringify(
         (parsedIO.messages as unknown[]).map((m) => {
@@ -316,10 +252,8 @@ export const convertMastraMessagesToGenAIMessages = (
         })
       );
     }
-    // we've failed type-guards, just return original I/O string
     return inputOutputString;
   } catch {
-    // silently fallback to original I/O string
     return inputOutputString;
   }
 };
