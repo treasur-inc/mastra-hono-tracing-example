@@ -1,21 +1,17 @@
 import { ArizeExporter } from "@mastra/arize";
 import { Mastra } from "@mastra/core";
-import {
-  SamplingStrategyType,
-  SensitiveDataFilter,
-} from "@mastra/core/ai-tracing";
+import { Observability, SamplingStrategyType } from "@mastra/observability";
 import { httpInstrumentationMiddleware } from "@hono/otel";
 import { mastraEndpoint, testAgent } from "./endpoint.js";
 
 const PROJECT_NAME = process.env.ARIZE_PROJECT_NAME || "tracing-exp";
 
 export const mastra: Mastra = new Mastra({
-  observability: {
+  observability: new Observability({
     configs: {
       default: {
         serviceName: PROJECT_NAME,
         sampling: { type: SamplingStrategyType.ALWAYS },
-        processors: [new SensitiveDataFilter()],
         exporters: [
           new ArizeExporter({
             projectName: PROJECT_NAME,
@@ -25,7 +21,7 @@ export const mastra: Mastra = new Mastra({
         ],
       },
     },
-  },
+  }),
   agents: { "test-agent": testAgent },
   server: {
     port: 4111,
@@ -37,9 +33,7 @@ export const mastra: Mastra = new Mastra({
     middleware: { path: "*", handler: httpInstrumentationMiddleware() },
   },
   bundler: {
-    // Externalize native binary dependencies
     externals: [],
-    // Enable source maps for debugging
     sourcemap: process.env.NODE_ENV !== "production",
   },
 });
